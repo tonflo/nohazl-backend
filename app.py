@@ -13,7 +13,7 @@ def chat():
 
     client = openai.OpenAI()  # Skapa klient enligt nya OpenAI-biblioteket
     response = client.chat.completions.create(
-        model="gpt-3.5-turbo",  # Ändrad modell
+        model="gpt-4o-mini",  # Ändrad modell
         messages=[{"role": "user", "content": user_message}]
     )
 
