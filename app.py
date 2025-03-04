@@ -4,19 +4,19 @@ import os
 
 app = Flask(__name__)
 
-# Använd miljövariabel för API-nyckeln
+# Hämta OpenAI API-nyckeln från miljövariabler
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 @app.route('/chat', methods=['POST'])
 def chat():
     user_message = request.json.get("message")
 
-    client = openai.OpenAI()  # Ny metod för att skapa klient
+    client = openai.OpenAI()  # Skapa klient enligt nya OpenAI-biblioteket
     response = client.chat.completions.create(
         model="gpt-4",
         messages=[{"role": "user", "content": user_message}]
     )
-    
+
     reply = response.choices[0].message.content
     return jsonify({"reply": reply})
 
