@@ -36,21 +36,31 @@ def chat():
         )
         user_data[user_id]["language"] = lang_response.choices[0].message.content.strip()
 
-    system_prompt = f"Du är en AI-assistent och ska svara på {user_data[user_id]['language']}. Håll dig till ämnet och använd sammanhanget från tidigare konversation."
-
+    # 🛑 Avgör om AI:n ska ställa följdfrågor istället för att ge en lång lista direkt
     client = openai.OpenAI()
-    response = client.chat.completions.create(
+    context_response = client.chat.completions.create(
         model="gpt-4o-mini",
-        messages=[{"role": "system", "content": system_prompt}] + user_data[user_id]["history"]
+        messages=[
+            {"role": "system", "content": "Analysera följande fråga och avgör om den är för bred. Om den är för bred, svara endast med 'BRED'. Om den är tydlig, svara 'TYDLIG'."},
+            {"role": "user", "content": user_message}
+        ]
     )
 
-    reply = response.choices[0].message.content
+    question_type = context_response.choices[0].message.content.strip()
+
+    if question_type == "BRED":
+        reply = "Det låter som att du vill veta mer om ett brett ämne. Kan du specificera lite mer? Till exempel, är du intresserad av verktyg, tekniker eller något annat specifikt?"
+    else:
+        # 🛑 AI ger svar baserat på tidigare konversation
+        system_prompt = f"Du är en AI-assistent och ska svara på {user_data[user_id]['language']}. Håll dig till ämnet och använd sammanhanget från tidigare konversation."
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "system", "content": system_prompt}] + user_data[user_id]["history"]
+        )
+        reply = response.choices[0].message.content
+
     user_data[user_id]["history"].append({"role": "assistant", "content": reply})
     user_data[user_id]["message_count"] += 1
-
-    # 🛑 Efter 5 meddelanden – erbjud sammanfattning
-    if user_data[user_id]["message_count"] == 5:
-        reply += "\n\n📩 Klicka på ikonen bredvid detta meddelande för en sammanfattning!"
 
     return jsonify({"reply": reply})
 
@@ -70,7 +80,7 @@ def send_summary():
         return jsonify({"error": "❌ Missing email or summary"}), 400
 
     msg = MIMEText(f"Here is your chat summary:\n\n{summary}")
-    msg["Subject"] = "Your Chat Summary from No Hazl AI Chat"
+    msg["Subject"] = "Your Chat Summary"
     msg["From"] = EMAIL_ADDRESS
     msg["To"] = email
 
