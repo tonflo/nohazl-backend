@@ -75,19 +75,22 @@ def summarize():
         return jsonify({"error": "Kunde inte skapa sammanfattning."}), 500
 
 def send_email(to_email, summary):
-    """ Skickar ett e-postmeddelande med chattsammanfattningen """
-    sender_email = os.getenv("EMAIL_USERNAME")
-    sender_password = os.getenv("EMAIL_PASSWORD")
+    """ Skickar ett e-postmeddelande med chattsammanfattningen via Strato """
+    sender_email = os.getenv("EMAIL_USERNAME")  # Din Strato-e-postadress
+    sender_password = os.getenv("EMAIL_PASSWORD")  # Ditt Strato-lösenord
+    smtp_server = "smtp.strato.de"  # Stratos SMTP-server
+    smtp_port = 465  # Stratos SSL-port
 
     if not sender_email or not sender_password:
         print("❌ E-postkonfiguration saknas! Lägg till miljövariablerna EMAIL_USERNAME och EMAIL_PASSWORD.")
         return
 
     try:
-        with smtplib.SMTP("smtp.gmail.com", 587) as server:
-            server.starttls()
+        # Skapa en anslutning med SSL
+        with smtplib.SMTP_SSL(smtp_server, smtp_port) as server:
             server.login(sender_email, sender_password)
-            server.sendmail(sender_email, to_email, f"Subject: Din chattsammanfattning\n\n{summary}")
+            message = f"Subject: Din chattsammanfattning\n\n{summary}"
+            server.sendmail(sender_email, to_email, message)
         print(f"✅ E-post skickad till {to_email}")
 
     except Exception as e:
