@@ -10,30 +10,31 @@ import time
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-# OpenAI API-konfiguration
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# 🛑 Spara användarens språk i en dictionary (använd sessioner om du vill ha det per användare)
-user_language = {}
+# 🛑 Spara användarens språk och meddelanderäkning
+user_data = {}
 
 @app.route('/chat', methods=['POST'])
 def chat():
     user_message = request.json.get("message")
-    user_id = request.remote_addr  # 🛑 Identifiera användaren via IP-adress (kan ändras till en bättre identifiering)
+    user_id = request.remote_addr  # 🛑 Identifiera användaren via IP-adress
 
-    if user_id not in user_language:
-        # 🛑 Första meddelandet: Låt AI identifiera språket
-        language_prompt = f"Identifiera vilket språk detta meddelande är skrivet på och svara endast med namnet på språket: {user_message}"
+    if user_id not in user_data:
+        user_data[user_id] = {"language": None, "message_count": 0}
+
+    # 🛑 Identifiera språk vid första meddelandet
+    if user_data[user_id]["language"] is None:
         client = openai.OpenAI()
         lang_response = client.chat.completions.create(
             model="gpt-4o-mini",
-            messages=[{"role": "user", "content": language_prompt}]
+            messages=[{"role": "user", "content": f"Identifiera språket i detta meddelande och svara endast med språknamnet: {user_message}"}]
         )
         detected_language = lang_response.choices[0].message.content.strip()
-        user_language[user_id] = detected_language
+        user_data[user_id]["language"] = detected_language
 
     # 🛑 Sätt språk i systempromten
-    system_prompt = f"Du är en AI-assistent som alltid svarar på {user_language[user_id]}. Håll konversationen på detta språk."
+    system_prompt = f"Du är en AI-assistent och ska svara på {user_data[user_id]['language']} hela konversationen."
 
     client = openai.OpenAI()
     response = client.chat.completions.create(
@@ -45,12 +46,22 @@ def chat():
     )
 
     reply = response.choices[0].message.content
+    user_data[user_id]["message_count"] += 1
+
+    # 🛑 Efter 5 meddelanden, erbjud sammanfattning
+    if user_data[user_id]["message_count"] == 5:
+        reply += "\n\n📌 Vill du ha en sammanfattning skickad? Tryck på knappen nedan!"
+
+    # 🛑 Om AI:n identifierar att det handlar om företag, fråga om registrering
+    if "företag" in user_message.lower() or "business" in user_message.lower():
+        reply += "\n\n🏢 Är du företagare? Vi kan registrera ditt företag i vårt lokalregister. Vill du veta mer?"
+
     return jsonify({"reply": reply})
 
-# Lista för att spara e-postadresser för uppföljning
+# 🛑 Lista för att spara e-postadresser för uppföljning
 saved_emails = []
 
-# E-postkonfiguration (NoHazl-mail)
+# 🛑 E-postkonfiguration
 EMAIL_ADDRESS = "chat@nohazl.com"
 EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
 SMTP_SERVER = "smtp.strato.de"
@@ -80,31 +91,6 @@ def send_summary():
         return jsonify({"message": "Summary sent successfully!"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
-@app.route('/get-saved-emails', methods=['GET'])
-def get_saved_emails():
-    return jsonify({"saved_emails": saved_emails})
-
-def follow_up_emails():
-    while True:
-        time.sleep(7 * 24 * 60 * 60)
-        for email in saved_emails:
-            try:
-                msg = MIMEText("Hello! One week ago, you received AI-generated advice from No Hazl AI Chat. Did our suggestions help? Let us know if you need further assistance!")
-                msg["Subject"] = "Follow-up from No Hazl AI Chat"
-                msg["From"] = EMAIL_ADDRESS
-                msg["To"] = email
-
-                with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as server:
-                    server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
-                    server.sendmail(EMAIL_ADDRESS, email, msg.as_string())
-
-                print(f"Follow-up email sent to {email}")
-            except Exception as e:
-                print(f"Failed to send follow-up email to {email}: {str(e)}")
-
-follow_up_thread = threading.Thread(target=follow_up_emails, daemon=True)
-follow_up_thread.start()
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 10000))
