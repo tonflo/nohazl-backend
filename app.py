@@ -10,6 +10,11 @@ CORS(app, resources={r"/*": {"origins": "*"}})  # Tillåter alla domäner att an
 # OpenAI API-konfiguration
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
+@app.route('/healthz', methods=['GET'])
+def health_check():
+    """ Används för att kolla om backend är uppe (Render Health Check) """
+    return jsonify({"status": "ok"}), 200
+
 @app.route('/chat', methods=['POST'])
 def chat():
     """ Hanterar chattförfrågningar och skickar dem till OpenAI """
@@ -78,8 +83,8 @@ def send_email(to_email, summary):
     """ Skickar ett e-postmeddelande med chattsammanfattningen via Strato """
     sender_email = os.getenv("EMAIL_USERNAME")  # Din Strato-e-postadress
     sender_password = os.getenv("EMAIL_PASSWORD")  # Ditt Strato-lösenord
-    smtp_server = "smtp.strato.de"  # Stratos SMTP-server
-    smtp_port = 465  # Stratos SSL-port
+    smtp_server = os.getenv("SMTP_SERVER", "smtp.strato.de")  # Stratos SMTP-server
+    smtp_port = int(os.getenv("SMTP_PORT", 465))  # Stratos SSL-port
 
     if not sender_email or not sender_password:
         print("❌ E-postkonfiguration saknas! Lägg till miljövariablerna EMAIL_USERNAME och EMAIL_PASSWORD.")
