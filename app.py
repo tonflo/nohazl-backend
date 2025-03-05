@@ -5,14 +5,16 @@ import os
 import smtplib
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})
+CORS(app, resources={r"/*": {"origins": "*"}})  # Tillåter alla domäner att anropa backend
 
 # OpenAI API-konfiguration
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 @app.route('/chat', methods=['POST'])
 def chat():
-    user_message = request.json.get("message")
+    """ Hanterar chattförfrågningar och skickar dem till OpenAI """
+    print("🔍 Request JSON:", request.json)  # Debug-logg
+    user_message = request.get_json(force=True).get("message")
 
     if not user_message:
         return jsonify({"reply": "Jag behöver en fråga eller ett ämne för att hjälpa dig!"}), 400
@@ -40,6 +42,7 @@ def chat():
 
 @app.route('/summary', methods=['POST'])
 def summarize():
+    """ Skapar en sammanfattning av chatten och skickar den via e-post """
     data = request.json
     chat_history = data.get("chat", "")
     user_email = data.get("email", "")
@@ -72,13 +75,24 @@ def summarize():
         return jsonify({"error": "Kunde inte skapa sammanfattning."}), 500
 
 def send_email(to_email, summary):
+    """ Skickar ett e-postmeddelande med chattsammanfattningen """
     sender_email = os.getenv("EMAIL_USERNAME")
     sender_password = os.getenv("EMAIL_PASSWORD")
 
-    with smtplib.SMTP("smtp.gmail.com", 587) as server:
-        server.starttls()
-        server.login(sender_email, sender_password)
-        server.sendmail(sender_email, to_email, f"Subject: Din chattsammanfattning\n\n{summary}")
+    if not sender_email or not sender_password:
+        print("❌ E-postkonfiguration saknas! Lägg till miljövariablerna EMAIL_USERNAME och EMAIL_PASSWORD.")
+        return
+
+    try:
+        with smtplib.SMTP("smtp.gmail.com", 587) as server:
+            server.starttls()
+            server.login(sender_email, sender_password)
+            server.sendmail(sender_email, to_email, f"Subject: Din chattsammanfattning\n\n{summary}")
+        print(f"✅ E-post skickad till {to_email}")
+
+    except Exception as e:
+        print("❌ Fel vid e-postutskick:", e)
 
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    port = int(os.environ.get("PORT", 5000))  # 🚀 Render tilldelar PORT dynamiskt
+    app.run(host="0.0.0.0", port=port)
