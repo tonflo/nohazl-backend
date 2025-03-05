@@ -4,7 +4,7 @@ import openai
 import os
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})
+CORS(app, resources={r"/*": {"origins": "*"}})  # Tillåter alla domäner att anropa backend
 
 # OpenAI API-konfiguration
 openai.api_key = os.getenv("OPENAI_API_KEY")
@@ -13,16 +13,15 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 def chat():
     user_message = request.json.get("message")
 
-    # Se till att vi alltid har ett användarmeddelande
     if not user_message:
         return jsonify({"reply": "Jag behöver en fråga eller ett ämne för att hjälpa dig!"})
 
-    # 🛑 Förbättrad prompt för att få AI:n att svara bättre
+    # 🛑 Förbättrad prompt för att undvika generiska svar
     prompt = f"""
-    Du är No Hazl Assistant, en hjälpsam och smart AI-assistent. 
+    Du är No Hazl Assistant, en hjälpsam AI-assistent.
     Ge konkreta och relevanta svar baserat på användarens fråga.
-    Om det är en bred fråga, ge en snabb sammanfattning men följ alltid upp med en specifik fråga för att hjälpa användaren att fördjupa sig mer.
-    Håll svaren korta och relevanta, men aldrig för generiska.
+    Om det är en bred fråga, ge en snabb sammanfattning men följ alltid upp med en specifik fråga.
+    Håll svaren korta och relevanta, men undvik att bara säga "kan du specificera mer?".
 
     Användarens fråga: {user_message}
     """
