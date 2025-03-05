@@ -1,8 +1,12 @@
 from flask import Flask, request, jsonify
+from flask_cors import CORS  # Importera CORS
 import openai
 import os
 
 app = Flask(__name__)
+
+# Tillåt alla origins att anropa backend
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 # Hämta OpenAI API-nyckeln från miljövariabler
 openai.api_key = os.getenv("OPENAI_API_KEY")
