@@ -18,14 +18,21 @@ def health_check():
 
 @app.route("/chat", methods=["POST"])
 def chat():
-    """
-    Mjuk ton: ställer följdfrågor, ger DIY-tips, erbjuder vidare hjälp.
-    """
-    data = request.get_json(force=True)
-    user_message = data.get("message", "").strip()
+    data = request.json
+    conversation = data.get("conversation", [])  # Hämta hela konversationen
 
-    if not user_message:
-        return jsonify({"reply": "Jag behöver en fråga eller ett ämne för att hjälpa dig!"}), 400
+    try:
+        client = openai.OpenAI()
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=conversation
+        )
+        reply = response.choices[0].message.content
+        return jsonify({"reply": reply})
+    except Exception as e:
+        print("❌ Fel i AI-anrop:", e)
+        return jsonify({"reply": "Något gick fel."}), 500
+
 
     # System-prompt utan f-string
     system_prompt = (
