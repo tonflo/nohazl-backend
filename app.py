@@ -3,50 +3,40 @@ from flask_cors import CORS
 import openai
 import os
 import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})
+CORS(app, resources={r"/*": {"origins": "*"}})  # Tillåter alla domäner att anropa backend
 
 # OpenAI API-konfiguration
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-@app.route("/healthz", methods=["GET"])
+@app.route('/healthz', methods=['GET'])
 def health_check():
+    """ Används för att kolla om backend är uppe (Render Health Check) """
     return jsonify({"status": "ok"}), 200
 
-@app.route("/chat", methods=["POST"])
+@app.route('/chat', methods=['POST'])
 def chat():
-    """Genererar mjukare svar och ställer följdfrågor samt uppsell om relevant."""
-    data = request.get_json(force=True)
-    user_message = data.get("message", "").strip()
+    """ Hanterar chattförfrågningar och skickar dem till OpenAI """
+    print("🔍 Request JSON:", request.json)  # Debug-logg
+    user_message = request.get_json(force=True).get("message")
 
     if not user_message:
         return jsonify({"reply": "Jag behöver en fråga eller ett ämne för att hjälpa dig!"}), 400
 
-    # Systemprompt för mjukare ton och följdfrågor
-    system_prompt = """
-    Du är No Hazl Assistant, en vänlig och empatisk AI.
-    - Hälsa alltid användaren varmt.
-    - Ge korta, konkreta DIY-tips.
-    - Ställ följdfrågor först, innan du levererar en längre lösning.
-    - Efter att du gett ett tips, erbjud gärna att No Hazl kan hjälpa dem mer personligt om det passar deras behov.
-    - Håll konversationen på ett mjukt, vänligt språk.
-    Exempel: "Har du fler detaljer?" "Behöver du mer hjälp?" "Vi kan gärna hjälpa dig vidare!"
-    """
+    prompt = f"""
+    Du är No Hazl Assistant, en hjälpsam AI som ger praktiska DIY-tips.
+    När användaren frågar något, ge alltid ett konkret tips de kan testa hemma.
+    Om det behövs mer info, ställ en specifik följdfråga.
 
-    # Bygger upp meddelandena till AI
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_message}
-    ]
+    Användarens fråga: {user_message}
+    """
 
     try:
         client = openai.OpenAI()
         response = client.chat.completions.create(
             model="gpt-4o-mini",
-            messages=messages
+            messages=[{"role": "user", "content": prompt}]
         )
         reply = response.choices[0].message.content
         return jsonify({"reply": reply})
@@ -55,10 +45,9 @@ def chat():
         print("❌ OpenAI API-fel:", e)
         return jsonify({"reply": "⚠️ Jag kunde inte hämta ett svar just nu. Försök igen senare."}), 500
 
-
-@app.route("/summary", methods=["POST"])
+@app.route('/summary', methods=['POST'])
 def summarize():
-    """ Skapar en sammanfattning av chatten och skickar den via e-post i HTML-format """
+    """ Skapar en sammanfattning av chatten och skickar den via e-post """
     data = request.json
     chat_history = data.get("chat", "")
     user_email = data.get("email", "")
@@ -66,13 +55,11 @@ def summarize():
     if not chat_history or not user_email:
         return jsonify({"error": "Chat eller e-postadress saknas!"}), 400
 
-    # Summaries i mjuk ton
     summary_prompt = f"""
-    Här är en konversation mellan en användare och en AI.
-    Sammanfatta det viktigaste på ett vänligt och lättsamt sätt.
-    Korta ner men behåll huvudpunkterna.
+    Här är en chatt mellan en användare och en AI-assistent.
+    Sammanfatta det viktigaste och ge en kort sammanfattning.
 
-    Konversation:
+    Chatt:
     {chat_history}
     """
 
@@ -84,7 +71,7 @@ def summarize():
         )
         summary = response.choices[0].message.content
 
-        # 🔥 Skicka sammanfattningen via HTML-mejl
+        # 🔥 Skicka sammanfattningen via e-post
         send_email(user_email, summary)
         return jsonify({"message": "Sammanfattning skickad!"})
 
@@ -92,50 +79,28 @@ def summarize():
         print("❌ Fel vid sammanfattning:", e)
         return jsonify({"error": "Kunde inte skapa sammanfattning."}), 500
 
-
 def send_email(to_email, summary):
-    """ Skickar ett HTML-e-postmeddelande med chattsammanfattningen via Strato """
-    sender_email = os.getenv("EMAIL_USERNAME")  # t.ex. chat@nohazl.com
-    sender_password = os.getenv("EMAIL_PASSWORD")
-    smtp_server = os.getenv("SMTP_SERVER", "smtp.strato.de")
-    smtp_port = int(os.getenv("SMTP_PORT", 465))
+    """ Skickar ett e-postmeddelande med chattsammanfattningen via Strato """
+    sender_email = os.getenv("EMAIL_USERNAME")  # Din Strato-e-postadress
+    sender_password = os.getenv("EMAIL_PASSWORD")  # Ditt Strato-lösenord
+    smtp_server = os.getenv("SMTP_SERVER", "smtp.strato.de")  # Stratos SMTP-server
+    smtp_port = int(os.getenv("SMTP_PORT", 465))  # Stratos SSL-port
 
     if not sender_email or not sender_password:
-        print("❌ E-postkonfiguration saknas! Lägg till EMAIL_USERNAME och EMAIL_PASSWORD.")
+        print("❌ E-postkonfiguration saknas! Lägg till miljövariablerna EMAIL_USERNAME och EMAIL_PASSWORD.")
         return
 
     try:
-        # Skapa ett HTML-mail
-        message = MIMEMultipart("alternative")
-        message["Subject"] = "Din sammanfattning från No Hazl Assistant"
-        message["From"] = sender_email
-        message["To"] = to_email
-
-        html_part = f"""
-        <html>
-            <body>
-                <h2>Din sammanfattning</h2>
-                <p>{summary.replace('\n','<br>')}</p>
-                <hr>
-                <p style="font-size:0.9em;">
-                    Tack för att du använder No Hazl Assistant!<br>
-                    Om du har fler frågor, tveka inte att höra av dig.
-                </p>
-            </body>
-        </html>
-        """
-        message.attach(MIMEText(html_part, "html"))
-
+        # Skapa en anslutning med SSL
         with smtplib.SMTP_SSL(smtp_server, smtp_port) as server:
             server.login(sender_email, sender_password)
-            server.sendmail(sender_email, to_email, message.as_string())
-
+            message = f"Subject: Din chattsammanfattning\n\n{summary}"
+            server.sendmail(sender_email, to_email, message)
         print(f"✅ E-post skickad till {to_email}")
 
     except Exception as e:
         print("❌ Fel vid e-postutskick:", e)
 
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
+if __name__ == '__main__':
+    port = int(os.environ.get("PORT", 5000))  # 🚀 Render tilldelar PORT dynamiskt
     app.run(host="0.0.0.0", port=port)
